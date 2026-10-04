@@ -4,124 +4,111 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>AR Implementation – Multimedia Lab</title>
-
-<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-<script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
-
+<!-- No A-Frame / AR.js script tags here on purpose.
+     The libraries, the AR scene and the GLB models are loaded only after the user taps buttons,
+     so the dashboard always appears instantly on a phone. -->
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
     font-family: Arial, Helvetica, sans-serif; background: #fff; color: #1a2b44; }
 
-  /* AR.js positions the camera video itself; do not force its size here. */
-  a-scene { position: fixed; inset: 0; z-index: 0; }
+  #arHost a-scene { position: fixed; inset: 0; z-index: 0; }
 
-  .screen { position: fixed; inset: 0; z-index: 10; }
+  .screen { position: fixed; inset: 0; }
   .hidden { display: none !important; }
 
   /* ---------- Dashboard ---------- */
-  #dashboard { background: #f3f6fa; display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; overflow-y: auto; }
+  #dashboard { z-index: 10; background: #f3f6fa; display: flex; align-items: center; justify-content: center;
+    padding: 20px; box-sizing: border-box; overflow-y: auto; }
   .card { background: #fff; border: 1px solid #c9d3e0; border-radius: 6px; padding: 24px 20px; width: 100%; max-width: 420px; box-sizing: border-box; }
   .card h1 { font-size: 24px; margin: 0 0 2px; }
   .card h2 { font-size: 16px; font-weight: normal; color: #4a5d78; margin: 0 0 14px; }
   .card p { font-size: 14px; line-height: 1.5; margin: 0 0 14px; }
-  .note { font-size: 12px; color: #4a5d78; border-top: 1px solid #e2e8f0; padding-top: 10px; margin: 16px 0 0; }
-  .label { font-size: 14px; font-weight: bold; margin: 0 0 8px; }
+  .note { font-size: 12px; color: #4a5d78; border-top: 1px solid #e2e8f0; padding-top: 10px; margin: 16px 0 0 !important; }
 
   button { font: inherit; font-size: 15px; padding: 12px 14px; border-radius: 4px; border: 1px solid #1f4e8c;
     background: #1f4e8c; color: #fff; cursor: pointer; width: 100%; margin-bottom: 8px; }
   button.secondary { background: #fff; color: #1f4e8c; }
+  button.on { background: #1f4e8c; color: #fff; }
   button:focus-visible { outline: 3px solid #f0a500; outline-offset: 2px; }
   button:disabled { opacity: .5; }
 
+  /* ---------- Loading overlay ---------- */
+  #loader { z-index: 30; background: rgba(243,246,250,.97); display: flex; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+  #loader .card { text-align: center; }
+  #loaderTitle { font-size: 18px; font-weight: bold; margin: 0 0 8px; }
+  #loaderText { font-size: 14px; line-height: 1.5; color: #4a5d78; margin: 0 0 14px; }
+  .spinner { width: 34px; height: 34px; margin: 0 auto 14px; border: 4px solid #c9d3e0; border-top-color: #1f4e8c; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
   /* ---------- Camera HUD ---------- */
-  #hud { pointer-events: none; background: transparent; }
+  #hud { z-index: 20; pointer-events: none; background: transparent; }
   #hud > * { pointer-events: auto; }
   #top { position: absolute; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top, 0px) + 10px) 10px 0; }
-  .panel { background: rgba(255,255,255,.93); border: 1px solid #c9d3e0; border-radius: 6px; padding: 10px 12px; }
+  .panel { background: rgba(255,255,255,.93); border: 1px solid #c9d3e0; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; }
   .panel b { display: block; font-size: 15px; }
   .panel span { font-size: 13px; color: #4a5d78; }
-  #status { margin-top: 8px; }
   #status.found { border-color: #1b8a3a; background: #e8f6ec; }
   #status.found b { color: #1b8a3a; }
   #status.error { border-color: #b3261e; background: #fdecea; }
   #status.error b { color: #b3261e; }
+  #chooser { display: flex; gap: 6px; }
+  #chooser button { margin: 0; padding: 9px 4px; font-size: 13px; }
 
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 10px 10px calc(env(safe-area-inset-bottom, 0px) + 10px); }
   .row { display: flex; gap: 8px; }
   .row button { margin-bottom: 8px; padding: 10px 6px; font-size: 14px; }
+
+  /* ---------- Error bar (so errors are never silent) ---------- */
+  #errbar { position: fixed; left: 0; right: 0; top: 0; z-index: 100; background: #b3261e; color: #fff; font-size: 12px; padding: 8px 10px; word-break: break-word; }
 </style>
 </head>
 
 <body>
 
-<!-- ===================== AR SCENE ===================== -->
-<a-scene
-  embedded
-  vr-mode-ui="enabled: false"
-  renderer="alpha: true; antialias: true; logarithmicDepthBuffer: true"
-  arjs="sourceType: webcam; sourceWidth: 1280; sourceHeight: 960; displayWidth: 1280; displayHeight: 960; debugUIEnabled: false;">
+<div id="errbar" class="hidden"></div>
 
-  <a-light type="ambient" color="#ffffff" intensity="1.3"></a-light>
-  <a-light type="directional" color="#ffffff" intensity="1.0" position="1 3 2"></a-light>
+<!-- The A-Frame scene is created here only after "Start AR Camera" -->
+<div id="arHost"></div>
 
-  <!-- Target 1: Coffee Cup (custom pattern marker) -->
-  <a-marker id="m-coffee" type="pattern" url="coffee-marker.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-    <a-entity id="p-coffee" spin visible="false">
-      <!-- Adjust scale / position here if the cup looks too big or small -->
-      <a-entity id="g-coffee" gltf-model="coffee.glb" scale="1 1 1" position="0 0 0"></a-entity>
-    </a-entity>
-  </a-marker>
-
-  <!-- Target 2: Toy Car (custom pattern marker) -->
-  <a-marker id="m-car" type="pattern" url="car-marker.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-    <a-entity id="p-car" spin visible="false">
-      <!-- Adjust scale / position here if the car looks too big or small -->
-      <a-entity id="g-car" gltf-model="car.glb" scale="1 1 1" position="0 0 0"></a-entity>
-    </a-entity>
-  </a-marker>
-
-  <!-- Backup: Hiro preset marker + Duck (original working demo) -->
-  <a-marker id="m-duck" preset="hiro" emitevents="true" smooth="true">
-    <a-entity id="p-duck" spin visible="false">
-      <a-entity id="g-duck" gltf-model="model.glb" scale="1 1 1" position="0 0 0"></a-entity>
-    </a-entity>
-  </a-marker>
-
-  <a-entity camera></a-entity>
-</a-scene>
-
-<!-- ===================== SCREEN 1: DASHBOARD ===================== -->
+<!-- ===================== DASHBOARD ===================== -->
 <div id="dashboard" class="screen">
   <div class="card">
     <h1>AR Implementation</h1>
     <h2>Multimedia Lab – Experiment 7</h2>
     <p>Explore an interactive WebAR application using AR.js and A-Frame. The phone camera detects a predefined reference marker and displays a 3D GLB model on top of it.</p>
-
-    <div id="startBox">
-      <button id="btnStart">Start AR Camera</button>
-    </div>
-
-    <div id="selectBox" class="hidden">
-      <p class="label">Select Target</p>
-      <button data-target="coffee">Coffee Cup</button>
-      <button data-target="car">Toy Car</button>
-      <button data-target="duck" class="secondary">Backup: Duck (Hiro marker)</button>
-    </div>
-
+    <button id="btnStart">Start AR Camera</button>
     <p class="note">Marker-based WebAR: detection uses predefined AR.js pattern markers, not general object recognition.</p>
   </div>
 </div>
 
-<!-- ===================== SCREEN 2: CAMERA HUD ===================== -->
+<!-- ===================== LOADING / ERROR OVERLAY ===================== -->
+<div id="loader" class="screen hidden">
+  <div class="card">
+    <div id="spinner" class="spinner"></div>
+    <p id="loaderTitle">Starting AR Camera...</p>
+    <p id="loaderText"></p>
+    <button id="btnLoaderBack" class="secondary hidden">Back to Dashboard</button>
+  </div>
+</div>
+
+<!-- ===================== CAMERA HUD ===================== -->
 <div id="hud" class="screen hidden">
   <div id="top">
     <div class="panel">
       <b>AR Camera</b>
-      <span id="hint">Point the camera at the selected target.</span>
+      <span id="hint">Select a target, then point the camera at its marker.</span>
+    </div>
+    <div class="panel">
+      <div id="chooser">
+        <button class="secondary" data-target="coffee">Coffee Cup</button>
+        <button class="secondary" data-target="car">Toy Car</button>
+        <button class="secondary" data-target="duck">Duck (Hiro)</button>
+      </div>
     </div>
     <div id="status" class="panel">
-      <b id="statusTitle">Waiting for target...</b>
-      <span id="statusText"></span>
+      <b id="statusTitle">Select a target</b>
+      <span id="statusText">Only the selected 3D model is loaded.</span>
     </div>
   </div>
 
@@ -133,28 +120,166 @@
       <button id="btnSmaller" class="secondary">Smaller</button>
       <button id="btnLarger" class="secondary">Larger</button>
     </div>
-    <button id="btnBack" class="secondary">Back to Targets</button>
+    <button id="btnExit" class="secondary">Exit AR</button>
   </div>
 </div>
 
 <script>
-  // Simple auto-rotation component (toggled with the Rotate button)
-  AFRAME.registerComponent('spin', {
-    schema: { on: { default: false } },
-    tick: function (t, dt) {
-      if (this.data.on) this.el.object3D.rotation.y += dt * 0.0012;
-    }
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------- Never fail silently ---------- */
+  function showError(msg) {
+    msg = String(msg || '');
+    if (msg.indexOf('ResizeObserver') !== -1 || msg === 'Script error.') return;
+    var e = $('errbar');
+    e.textContent = 'Error: ' + msg + '  (tap to dismiss)';
+    e.classList.remove('hidden');
+  }
+  $('errbar').onclick = function () { this.classList.add('hidden'); };
+  window.addEventListener('error', function (ev) { showError(ev.message); });
+  window.addEventListener('unhandledrejection', function (ev) {
+    showError(ev.reason && ev.reason.message ? ev.reason.message : ev.reason);
   });
 
+  /* ---------- Settings ---------- */
+  var AFRAME_URLS = [
+    'https://aframe.io/releases/1.6.0/aframe.min.js',
+    'https://cdn.jsdelivr.net/npm/aframe@1.6.0/dist/aframe.min.js'
+  ];
+  var ARJS_URLS = [
+    'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.7/aframe/build/aframe-ar.js',
+    'https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js'
+  ];
   var TARGETS = {
-    coffee: { name: 'Coffee Cup', file: 'coffee.glb' },
-    car:    { name: 'Toy Car',    file: 'car.glb' },
-    duck:   { name: 'Duck (Hiro backup)', file: 'model.glb' }
+    coffee: { name: 'Coffee Cup',         file: 'coffee.glb', size: '4.7 MB' },
+    car:    { name: 'Toy Car',            file: 'car.glb',    size: '5.3 MB' },
+    duck:   { name: 'Duck (Hiro backup)', file: 'model.glb',  size: '118 KB' }
+  };
+  var KEYS = ['coffee', 'car', 'duck'];
+
+  /* ---------- Loader overlay helpers ---------- */
+  function showLoader(title, text, isError) {
+    $('loader').classList.remove('hidden');
+    $('loaderTitle').textContent = title;
+    $('loaderText').textContent = text || '';
+    $('spinner').classList.toggle('hidden', !!isError);
+    $('btnLoaderBack').classList.toggle('hidden', !isError);
+  }
+  $('btnLoaderBack').onclick = function () { location.reload(); };
+
+  /* ---------- Load a script, trying fallback hosts ---------- */
+  function loadScript(urls) {
+    return new Promise(function (resolve, reject) {
+      var i = 0;
+      (function next() {
+        if (i >= urls.length) { reject(new Error('Could not download ' + urls[0].split('/').pop() + '. Check the internet connection.')); return; }
+        var s = document.createElement('script'), done = false;
+        var timer = setTimeout(function () { if (!done) { done = true; s.remove(); next(); } }, 20000);
+        s.src = urls[i++];
+        s.onload = function () { if (!done) { done = true; clearTimeout(timer); resolve(); } };
+        s.onerror = function () { if (!done) { done = true; clearTimeout(timer); s.remove(); next(); } };
+        document.head.appendChild(s);
+      })();
+    });
+  }
+
+  /* ---------- Ask for camera permission (must run inside the button tap) ---------- */
+  function askCamera() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return Promise.reject(new Error('Camera is not available. Open the page over HTTPS in Chrome.'));
+    }
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      .catch(function (err) {
+        if (err && err.name === 'OverconstrainedError') return navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        throw err;
+      })
+      .then(function (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); });
+  }
+  function cameraErrorText(err) {
+    var n = err && err.name;
+    if (n === 'NotAllowedError' || n === 'SecurityError') return 'Camera permission was denied. Tap the lock icon in the address bar, allow Camera, then try again.';
+    if (n === 'NotFoundError') return 'No camera was found on this device.';
+    if (n === 'NotReadableError') return 'The camera is being used by another app. Close it and try again.';
+    return (err && err.message) ? err.message : 'The camera could not be started.';
+  }
+
+  /* ---------- Build the AR scene (called once, after camera permission) ---------- */
+  function buildScene() {
+    AFRAME.registerComponent('spin', {
+      schema: { on: { default: false } },
+      tick: function (t, dt) { if (this.data.on) this.el.object3D.rotation.y += dt * 0.0012; }
+    });
+
+    var smooth = 'emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5"';
+    // NOTE: no gltf-model here. Models are added only when a target is selected.
+    $('arHost').innerHTML =
+      '<a-scene embedded vr-mode-ui="enabled: false" renderer="alpha: true; antialias: false" ' +
+        'arjs="sourceType: webcam; sourceWidth: 640; sourceHeight: 480; displayWidth: 640; displayHeight: 480; debugUIEnabled: false;">' +
+        '<a-light type="ambient" color="#ffffff" intensity="1.3"></a-light>' +
+        '<a-light type="directional" color="#ffffff" intensity="1.0" position="1 3 2"></a-light>' +
+        '<a-marker id="m-coffee" type="pattern" url="coffee-marker.patt" ' + smooth + '><a-entity id="p-coffee" spin visible="false"></a-entity></a-marker>' +
+        '<a-marker id="m-car" type="pattern" url="car-marker.patt" ' + smooth + '><a-entity id="p-car" spin visible="false"></a-entity></a-marker>' +
+        '<a-marker id="m-duck" preset="hiro" ' + smooth + '><a-entity id="p-duck" spin visible="false"></a-entity></a-marker>' +
+        '<a-entity camera></a-entity>' +
+      '</a-scene>';
+
+    KEYS.forEach(function (key) {
+      var m = $('m-' + key);
+      m.addEventListener('markerFound', function () {
+        if (active !== key) return;
+        found = true; refresh();
+      });
+      m.addEventListener('markerLost', function () {
+        if (active !== key) return;
+        found = false; refresh();
+      });
+    });
+  }
+
+  /* ---------- Wait until the camera video is really playing ---------- */
+  function waitForCamera() {
+    return new Promise(function (resolve, reject) {
+      var start = Date.now();
+      window.addEventListener('camera-error', function () {
+        reject(new Error('AR.js could not start the camera.'));
+      });
+      (function poll() {
+        var v = document.querySelector('video');
+        if (v && v.readyState >= 2 && v.videoWidth > 0) { resolve(); return; }
+        if (Date.now() - start > 30000) { reject(new Error('The camera did not start within 30 seconds.')); return; }
+        setTimeout(poll, 300);
+      })();
+    });
+  }
+
+  /* ---------- START AR CAMERA ---------- */
+  $('btnStart').onclick = function () {
+    $('btnStart').disabled = true;
+    showLoader('Starting AR Camera...', 'Tap Allow when the browser asks for camera access.');
+
+    askCamera()
+      .then(function () {
+        showLoader('Starting AR Camera...', 'Loading AR libraries. The first time can take a few seconds.');
+        return loadScript(AFRAME_URLS);
+      })
+      .then(function () { return loadScript(ARJS_URLS); })
+      .then(function () {
+        showLoader('Starting AR Camera...', 'Starting the camera and marker tracking.');
+        buildScene();
+        return waitForCamera();
+      })
+      .then(function () {
+        $('loader').classList.add('hidden');
+        $('dashboard').classList.add('hidden');
+        $('hud').classList.remove('hidden');
+      })
+      .catch(function (err) {
+        showLoader('Could not start AR', cameraErrorText(err), true);
+      });
   };
 
-  var active = null, found = false, shown = false, hiddenModel = false, rotating = false, size = 1;
-
-  var $ = function (id) { return document.getElementById(id); };
+  /* ---------- State ---------- */
+  var active = null, found = false, modelReady = false, shown = false, hiddenModel = false, rotating = false, size = 1;
 
   function setStatus(cls, title, text) {
     $('status').className = 'panel ' + cls;
@@ -162,74 +287,70 @@
     $('statusText').textContent = text || '';
   }
 
-  function pivot(key) { return $('p-' + key); }
-
   function refresh() {
-    var btnResult = $('btnResult'), controls = $('controls');
-    btnResult.classList.toggle('hidden', !(found && !shown));
-    controls.classList.toggle('hidden', !shown);
-    if (active) {
-      var p = pivot(active);
-      p.object3D.visible = shown && !hiddenModel;
-      p.object3D.scale.set(size, size, size);
-      p.setAttribute('spin', 'on', rotating);
+    if (!active) return;
+    var t = TARGETS[active];
+    if (!modelReady) {
+      setStatus('', 'Loading 3D Model...', t.file + ' (' + t.size + '). Please wait.');
+    } else if (found) {
+      setStatus('found', 'Target Detected!', t.name + ' target recognized.');
+    } else {
+      setStatus('', 'Waiting for target...', 'Point the camera at the ' + t.name + ' marker.');
     }
+    $('btnResult').classList.toggle('hidden', !(found && modelReady && !shown));
+    $('controls').classList.toggle('hidden', !shown);
+
+    var p = $('p-' + active);
+    p.object3D.visible = shown && !hiddenModel;
+    p.object3D.scale.set(size, size, size);
+    p.setAttribute('spin', 'on', rotating);
     $('btnHide').textContent = hiddenModel ? 'Show' : 'Hide';
     $('btnRotate').textContent = rotating ? 'Stop' : 'Rotate';
   }
 
+  /* ---------- Select a target: load ONLY that GLB ---------- */
   function selectTarget(key) {
-    // Reset everything for the newly selected target
-    ['coffee', 'car', 'duck'].forEach(function (k) { pivot(k).object3D.visible = false; });
-    active = key; found = false; shown = false; hiddenModel = false; rotating = false; size = 1;
-    pivot(key).object3D.rotation.y = 0;
+    // remove any previously loaded model so only one is in memory
+    KEYS.forEach(function (k) {
+      var p = $('p-' + k);
+      p.object3D.visible = false;
+      while (p.firstChild) p.removeChild(p.firstChild);
+    });
+
+    active = key; found = false; modelReady = false; shown = false; hiddenModel = false; rotating = false; size = 1;
+    $('p-' + key).object3D.rotation.y = 0;
+
+    document.querySelectorAll('#chooser button').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-target') === key);
+      b.classList.toggle('secondary', b.getAttribute('data-target') !== key);
+    });
     $('hint').textContent = 'Point the camera at the ' + TARGETS[key].name + ' marker.';
-    setStatus('', 'Waiting for target...', 'Scanning for the ' + TARGETS[key].name + ' marker.');
-    $('dashboard').classList.add('hidden');
-    $('hud').classList.remove('hidden');
     refresh();
+
+    var g = document.createElement('a-entity');
+    g.addEventListener('model-loaded', function () {
+      if (active !== key) return;
+      modelReady = true; refresh();
+    });
+    g.addEventListener('model-error', function () {
+      if (active !== key) return;
+      setStatus('error', 'Model failed to load', TARGETS[key].file + ' could not be loaded. Check the file name in the repository.');
+    });
+    g.setAttribute('gltf-model', TARGETS[key].file);
+    $('p-' + key).appendChild(g);
   }
 
-  // Marker events (only the active target is acted on)
-  Object.keys(TARGETS).forEach(function (key) {
-    var m = $('m-' + key);
-    m.addEventListener('markerFound', function () {
-      if (active !== key) return;
-      found = true;
-      setStatus('found', 'Target Detected!', TARGETS[key].name + ' target recognized.');
-      refresh();
-    });
-    m.addEventListener('markerLost', function () {
-      if (active !== key) return;
-      found = false;
-      setStatus('', 'Waiting for target...', 'Target lost. Point the camera at the ' + TARGETS[key].name + ' marker.');
-      refresh();
-    });
-    // Report GLB loading problems on screen
-    $('g-' + key).addEventListener('model-error', function () {
-      if (active === key) setStatus('error', 'Model failed to load', TARGETS[key].file + ' not found. Check the file name.');
-    });
-  });
-
-  // Buttons
-  $('btnStart').onclick = function () {
-    $('startBox').classList.add('hidden');
-    $('selectBox').classList.remove('hidden');
-  };
-  document.querySelectorAll('[data-target]').forEach(function (b) {
+  document.querySelectorAll('#chooser button').forEach(function (b) {
     b.onclick = function () { selectTarget(b.getAttribute('data-target')); };
   });
-  $('btnResult').onclick = function () { shown = true; hiddenModel = false; refresh(); };
-  $('btnHide').onclick = function () { hiddenModel = !hiddenModel; refresh(); };
-  $('btnRotate').onclick = function () { rotating = !rotating; refresh(); };
+
+  /* ---------- Controls ---------- */
+  $('btnResult').onclick  = function () { shown = true; hiddenModel = false; refresh(); };
+  $('btnHide').onclick    = function () { hiddenModel = !hiddenModel; refresh(); };
+  $('btnRotate').onclick  = function () { rotating = !rotating; refresh(); };
   $('btnSmaller').onclick = function () { size = Math.max(0.2, size * 0.8); refresh(); };
-  $('btnLarger').onclick = function () { size = Math.min(5, size * 1.25); refresh(); };
-  $('btnBack').onclick = function () {
-    active = null; found = false; shown = false;
-    ['coffee', 'car', 'duck'].forEach(function (k) { pivot(k).object3D.visible = false; });
-    $('hud').classList.add('hidden');
-    $('dashboard').classList.remove('hidden');
-  };
+  $('btnLarger').onclick  = function () { size = Math.min(5, size * 1.25); refresh(); };
+  $('btnExit').onclick    = function () { location.reload(); };   // fully stops the camera
 </script>
 </body>
 </html>
