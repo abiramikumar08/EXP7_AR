@@ -56,8 +56,6 @@
   #status.found b { color: #1b8a3a; }
   #status.error { border-color: #b3261e; background: #fdecea; }
   #status.error b { color: #b3261e; }
-  #chooser { display: flex; gap: 6px; }
-  #chooser button { margin: 0; padding: 9px 4px; font-size: 13px; }
   #debug { font-family: monospace; font-size: 11px; line-height: 1.5; color: #1a2b44; white-space: pre-wrap; word-break: break-word; }
 
   #bottom { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 8px calc(env(safe-area-inset-bottom, 0px) + 18px); }
@@ -102,18 +100,11 @@
   <div id="top">
     <div class="panel">
       <b>AR Camera</b>
-      <span id="hint">Select a target, then point the camera at its marker.</span>
-    </div>
-    <div class="panel">
-      <div id="chooser">
-        <button class="secondary" data-target="coffee">Coffee Cup</button>
-        <button class="secondary" data-target="car">Toy Car</button>
-        <button class="secondary" data-target="duck">Duck (Hiro)</button>
-      </div>
+      <span id="hint">Point the camera at the Coffee Cup marker.</span>
     </div>
     <div id="status" class="panel">
-      <b id="statusTitle">Select a target</b>
-      <span id="statusText">Only the selected 3D model is loaded.</span>
+      <b id="statusTitle">Coffee Cup</b>
+      <span id="statusText">Coffee Cup 3D model will be loaded.</span>
     </div>
     <div class="panel"><div id="debug"></div></div>
   </div>
@@ -157,11 +148,9 @@
     'https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js'
   ];
   var TARGETS = {
-    coffee: { name: 'Coffee Cup',         file: 'coffee.glb', size: '4.7 MB' },
-    car:    { name: 'Toy Car',            file: 'car.glb',    size: '5.3 MB' },
-    duck:   { name: 'Duck (Hiro backup)', file: 'model.glb',  size: '118 KB' }
+    coffee: { name: 'Coffee Cup', file: 'coffee.glb', size: '4.7 MB' }
   };
-  var KEYS = ['coffee', 'car', 'duck'];
+  var KEYS = ['coffee'];
   var FIT_SIZE = 0.8;   // every model is auto-scaled to about this size (the marker is 1 unit wide)
 
   /* ---------- State ---------- */
@@ -217,10 +206,8 @@
         'arjs="sourceType: webcam; sourceWidth: 640; sourceHeight: 480; displayWidth: 640; displayHeight: 480; debugUIEnabled: false;">' +
         '<a-light type="ambient" color="#ffffff" intensity="1.3"></a-light>' +
         '<a-light type="directional" color="#ffffff" intensity="1.0" position="1 3 2"></a-light>' +
-        '<a-marker id="m-coffee" type="pattern" url="coffee-marker.patt" ' + smooth + '><a-entity id="p-coffee" spin visible="false"></a-entity></a-marker>' +
-        '<a-marker id="m-car" type="pattern" url="car-marker.patt" ' + smooth + '><a-entity id="p-car" spin visible="false"></a-entity></a-marker>' +
-        '<a-marker id="m-duck" preset="hiro" ' + smooth + '><a-entity id="p-duck" spin visible="false"></a-entity></a-marker>' +
-        '<a-entity camera></a-entity>' +
+      '<a-marker id="m-coffee" type="pattern" url="coffee-marker.patt" ' + smooth + '><a-entity id="p-coffee" spin visible="false"></a-entity></a-marker>' +
+      '<a-entity camera></a-entity>' +
       '</a-scene>';
 
     KEYS.forEach(function (key) {
@@ -281,7 +268,7 @@
         $('loader').classList.add('hidden');
         $('dashboard').classList.add('hidden');
         $('hud').classList.remove('hidden');
-        refresh();
+        selectTarget('coffee');
       })
       .catch(function (err) {
         cameraState = 'ERROR';
@@ -355,7 +342,7 @@
     $('btnRotate').textContent = rotating ? 'Stop' : 'Rotate';
   }
 
-  /* ---------- Select a target: load ONLY that GLB (as a child of its marker) ---------- */
+  /* ---------- Load the Coffee Cup GLB as a child of its marker ---------- */
   function selectTarget(key) {
     KEYS.forEach(function (k) {
       var p = $('p-' + k);
@@ -396,10 +383,6 @@
     $('p-' + key).appendChild(g);
     console.log('Selected target:', key, $('p-' + key));
   }
-
-  document.querySelectorAll('#chooser button').forEach(function (b) {
-    b.onclick = function () { selectTarget(b.getAttribute('data-target')); };
-  });
 
   /* ---------- Controls ---------- */
   $('btnResult').onclick  = function () { shown = true; hiddenModel = false; refresh(); };
